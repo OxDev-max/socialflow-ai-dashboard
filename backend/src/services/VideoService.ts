@@ -13,6 +13,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../lib/logger';
 import { eventBus } from '../lib/eventBus';
 import { getRedisConnection } from '../config/runtime';
+import {
+  videoTranscodeJobsTotal,
+  videoTranscodeJobDurationSeconds,
+} from '../lib/metrics';
 
 const logger = createLogger('VideoService');
 
@@ -145,6 +149,9 @@ export async function processVideoJob(bullJob: Job<VideoJobPayload>): Promise<vo
   let completedTasks = 0;
   const outputs: TranscodedOutput[] = [];
 
+  videoTranscodeJobsTotal.inc({ outcome: 'attempted' });
+  const endTimer = videoTranscodeJobDurationSeconds.startTimer();
+
   try {
     for (const quality of qualities) {
       for (const format of formats) {
@@ -169,10 +176,16 @@ export async function processVideoJob(bullJob: Job<VideoJobPayload>): Promise<vo
       throw new Error('All transcoding attempts failed');
     }
 
+    videoTranscodeJobsTotal.inc({ outcome: 'succeeded' });
+
     if (userId) {
       eventBus.emitJobProgress({ jobId, userId, type: 'video_transcoding', status: 'completed', progress: 100, message: 'Job completed' });
     }
+  } catch (error) {
+    videoTranscodeJobsTotal.inc({ outcome: 'failed' });
+    throw error;
   } finally {
+    endTimer();
     // Log cleanup errors so they don't silently mask the transcoding result (#1045)
     await fs.unlink(inputPath).catch((cleanupErr: Error) => {
       logger.warn(`Failed to delete temp input file ${inputPath}:`, { error: cleanupErr });
@@ -249,28 +262,19 @@ class VideoService {
 
   private bullJobToTranscodingJob(bullJob: Job<VideoJobPayload>): TranscodingJob {
     const { jobId, inputPath, outputDir, qualities, formats } = bullJob.data;
-    const state = bullJob.finishedOn
-      ? bullJob.failedReason
-        ? 'failed'
-        : 'completed'
-      : bullJob.processedOn
-        ? 'processing'
-        : 'pending';
-
     return {
       id: jobId,
       inputPath,
       outputDir,
-      status: state as TranscodingJob['status'],
+      status: 'processing',
       progress: typeof bullJob.progress === 'number' ? bullJob.progress : 0,
       qualities,
       formats,
       createdAt: new Date(bullJob.timestamp),
-      updatedAt: new Date(bullJob.finishedOn ?? bullJob.processedOn ?? bullJob.timestamp),
-      error: bullJob.failedReason,
+      updatedAt: new Date(bullJob.timestamp),
       outputs: [],
     };
   }
 }
 
-export const videoService = new VideoService();
+export default new VideoService();

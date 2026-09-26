@@ -1,4 +1,8 @@
 import { createLogger } from '../lib/logger';
+import {
+  videoTranscodeJobsTotal,
+  videoTranscodeJobDurationSeconds,
+} from '../lib/metrics';
 
 const logger = createLogger('VideoQueue');
 
@@ -80,14 +84,22 @@ class VideoQueue {
 
       logger.info(`Starting job ${job.id}`, { queueLength: this.queue.length });
 
+      const startTime = process.hrtime.bigint();
+      let status = 'failed';
+
       try {
         await job.processor();
+        status = 'succeeded';
         logger.info(`Job ${job.id} completed successfully`);
         job.resolve();
       } catch (error) {
         logger.error(`Job ${job.id} failed`, { error });
         job.reject(error);
       } finally {
+        const durationSeconds = Number(process.hrtime.bigint() - startTime) / 1e9;
+        videoTranscodeJobsTotal.inc({ status });
+        videoTranscodeJobDurationSeconds.observe({ status }, durationSeconds);
+
         this.activeJobs--;
         if (this.activeJobs === 0 && this.pendingMaxConcurrent !== null) {
           this.maxConcurrent = this.pendingMaxConcurrent;

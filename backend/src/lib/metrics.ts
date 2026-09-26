@@ -119,6 +119,36 @@ export const webhookDispatchFailed = new Counter({
   registers: [register],
 });
 
+/**
+ * Video transcode job counters/histogram — incremented/observed by the video
+ * transcode job processor on each attempt, success, and failure.
+ * Follows the same per-job-type pattern as filesPrunedTotal/webhookDispatchFailed.
+ */
+export const videoTranscodeAttemptedTotal = new Counter({
+  name: 'video_transcode_attempted_total',
+  help: 'Total number of video transcode job attempts started',
+  registers: [register],
+});
+
+export const videoTranscodeSucceededTotal = new Counter({
+  name: 'video_transcode_succeeded_total',
+  help: 'Total number of video transcode jobs that completed successfully',
+  registers: [register],
+});
+
+export const videoTranscodeFailedTotal = new Counter({
+  name: 'video_transcode_failed_total',
+  help: 'Total number of video transcode jobs that failed with an error',
+  registers: [register],
+});
+
+export const videoTranscodeDuration = new Histogram({
+  name: 'video_transcode_duration_ms',
+  help: 'Video transcode job duration in milliseconds',
+  buckets,
+  registers: [register],
+});
+
 /** Map a request path to an SLI category. */
 export function resolveCategory(path: string): string {
   if (/^\/(health|status)/.test(path) || /\/health/.test(path)) return 'health';
