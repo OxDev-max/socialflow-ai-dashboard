@@ -179,6 +179,37 @@ export const payoutJobDuration = new Histogram({
   registers: [register],
 });
 
+/**
+ * Blockchain-sync job counters/histogram — incremented/observed by the
+ * blockchain-sync (sync-queue) job processor on each attempt, success, and
+ * failure. Follows the same per-job-type pattern as
+ * filesPrunedTotal/webhookDispatchFailed.
+ */
+export const blockchainSyncAttemptedTotal = new Counter({
+  name: 'blockchain_sync_attempted_total',
+  help: 'Total number of blockchain-sync job attempts started',
+  registers: [register],
+});
+
+export const blockchainSyncSucceededTotal = new Counter({
+  name: 'blockchain_sync_succeeded_total',
+  help: 'Total number of blockchain-sync jobs that completed successfully',
+  registers: [register],
+});
+
+export const blockchainSyncFailedTotal = new Counter({
+  name: 'blockchain_sync_failed_total',
+  help: 'Total number of blockchain-sync jobs that failed with an error',
+  registers: [register],
+});
+
+export const blockchainSyncDuration = new Histogram({
+  name: 'blockchain_sync_duration_ms',
+  help: 'Blockchain-sync job duration in milliseconds',
+  buckets,
+  registers: [register],
+});
+
 /** Map a request path to an SLI category. */
 export function resolveCategory(path: string): string {
   if (/^\/(health|status)/.test(path) || /\/health/.test(path)) return 'health';
