@@ -149,6 +149,36 @@ export const videoTranscodeDuration = new Histogram({
   registers: [register],
 });
 
+/**
+ * Payout job counters/histogram — incremented/observed by the payout job
+ * processor on each attempt, success, and failure.
+ * Follows the same per-job-type pattern as filesPrunedTotal/webhookDispatchFailed.
+ */
+export const payoutJobAttemptedTotal = new Counter({
+  name: 'payout_job_attempted_total',
+  help: 'Total number of payout job attempts started',
+  registers: [register],
+});
+
+export const payoutJobSucceededTotal = new Counter({
+  name: 'payout_job_succeeded_total',
+  help: 'Total number of payout jobs that completed successfully',
+  registers: [register],
+});
+
+export const payoutJobFailedTotal = new Counter({
+  name: 'payout_job_failed_total',
+  help: 'Total number of payout jobs that failed with an error',
+  registers: [register],
+});
+
+export const payoutJobDuration = new Histogram({
+  name: 'payout_job_duration_ms',
+  help: 'Payout job duration in milliseconds',
+  buckets,
+  registers: [register],
+});
+
 /** Map a request path to an SLI category. */
 export function resolveCategory(path: string): string {
   if (/^\/(health|status)/.test(path) || /\/health/.test(path)) return 'health';

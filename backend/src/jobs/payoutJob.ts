@@ -5,6 +5,12 @@ import { prisma } from '../lib/prisma';
 import { createHash } from 'crypto';
 import { LockService } from '../utils/LockService';
 import { createLogger } from '../lib/logger';
+import {
+  payoutJobAttemptedTotal,
+  payoutJobSucceededTotal,
+  payoutJobFailedTotal,
+  payoutJobDurationSeconds,
+} from '../lib/metrics';
 
 const logger = createLogger('payout-job');
 
@@ -48,6 +54,9 @@ export async function processPayoutJob(job: Job<PayoutJobData>) {
 
   logger.info(`Processing job ${job.id}`, { jobId: job.id, groupId, amount, currency, recipient });
 
+  payoutJobAttemptedTotal.inc();
+  const endTimer = payoutJobDurationSeconds.startTimer();
+
   try {
     // Log job progress
     await job.updateProgress(10);
@@ -74,7 +83,7 @@ export async function processPayoutJob(job: Job<PayoutJobData>) {
     // Acquire an exclusive distributed lock keyed to the payout group/job so
     // that concurrent triggers (e.g. manual retry + scheduled run) cannot
     // both read a pending record and initiate duplicate transfers.
-    return await LockService.withLock(`payout:${groupId}:${job.id ?? 'unknown'}`, async () => {
+    const result = await LockService.withLock(`payout:${groupId}:${job.id ?? 'unknown'}`, async () => {
       // ── Stellar / crypto idempotency check ──────────────────────────────
       let transactionHash: string | undefined;
       let skipped = false;
@@ -155,9 +164,17 @@ export async function processPayoutJob(job: Job<PayoutJobData>) {
         metadata,
       };
     });
+
+    payoutJobSucceededTotal.inc();
+    endTimer();
+
+    return result;
   } catch (error: any) {
     const reason = error.message as string;
     logger.error(`Job ${job.id} failed`, { jobId: job.id, reason });
+
+    payoutJobFailedTotal.inc();
+    endTimer();
 
     try {
       await prisma.payoutFailure.create({
